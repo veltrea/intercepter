@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veltrea Interceptor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #1e1e1e; --bg-panel: #252526; --bg-hover: #2a2d2e;
+  --border: #3c3c3c; --text: #cccccc; --text-dim: #858585;
+  --accent: #0e639c; --accent-hover: #1177bb;
+  --green: #4ec9b0; --red: #f44747; --yellow: #dcdcaa; --blue: #569cd6;
+  --font: 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; }
+
+/* Scrollbar: dark & thin */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #777; }
+
+/* Layout: 3-panel */
+.app { display: grid; grid-template-columns: 280px 1fr 1fr; grid-template-rows: 40px 1fr 32px; height: 100vh; }
+.header { grid-column: 1 / -1; display: flex; align-items: center; padding: 0 12px; background: var(--bg-panel); border-bottom: 1px solid var(--border); gap: 16px; }
+.header h1 { font-size: 14px; font-weight: 600; color: var(--text); }
+.header .status { font-size: 12px; color: var(--text-dim); }
+.header .metrics { margin-left: auto; display: flex; gap: 16px; font-size: 12px; font-family: var(--mono); }
+.header .metrics .val { color: var(--green); }
+.footer { grid-column: 1 / -1; display: flex; align-items: center; padding: 0 12px; background: var(--bg-panel); border-top: 1px solid var(--border); font-size: 11px; color: var(--text-dim); gap: 16px; }
+
+/* Left: request list */
+.request-list { border-right: 1px solid var(--border); overflow-y: auto; }
+.req-item { padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+.req-item:hover { background: var(--bg-hover); }
+.req-item.selected { background: var(--accent); }
+.req-item .method { font-family: var(--mono); font-weight: 600; font-size: 11px; }
+.req-item .method.POST { color: var(--yellow); }
+.req-item .method.GET { color: var(--green); }
+.req-item .path { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-left: 4px; }
+.req-item .meta { display: flex; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--text-dim); }
+.req-item .model { color: var(--blue); }
+.req-item .status-ok { color: var(--green); }
+.req-item .status-err { color: var(--red); }
+.req-item .tps { color: var(--green); font-family: var(--mono); }
+.req-item .msg-count { color: var(--text-dim); font-family: var(--mono); }
+
+/* Center: detail inspector */
+.detail-panel { border-right: 1px solid var(--border); overflow-y: auto; padding: 12px; }
+.detail-panel h2 { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; margin: 12px 0 6px; letter-spacing: 0.5px; }
+.detail-panel h2:first-child { margin-top: 0; }
+.pre-wrap { position: relative; }
+.pre-wrap pre { background: #1a1a1a; border: 1px solid var(--border); border-radius: 4px; padding: 8px; padding-top: 28px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+.copy-btn { position: absolute; top: 4px; right: 4px; background: #333; border: 1px solid #555; color: #aaa; padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 10px; z-index: 1; }
+.copy-btn:hover { background: #555; color: #fff; }
+.copy-btn.copied { background: #264f36; color: var(--green); }
+.detail-panel .timing { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.detail-panel .timing .stat { background: #1a1a1a; border: 1px solid var(--border); border-radius: 4px; padding: 8px; text-align: center; }
+.detail-panel .timing .stat .label { font-size: 10px; text-transform: uppercase; color: var(--text-dim); }
+.detail-panel .timing .stat .value { font-family: var(--mono); font-size: 16px; color: var(--green); margin-top: 2px; }
+
+/* Right: live stream */
+.stream-panel { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; }
+.stream-panel h2 { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
+.stream-panel .controls { display: flex; gap: 6px; }
+.stream-panel .controls button { background: var(--bg-hover); border: 1px solid var(--border); color: var(--text); padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+.stream-panel .controls button:hover { background: var(--accent); }
+.stream-panel .controls button.active { background: var(--accent); }
+.stream-output { flex: 1; background: #1a1a1a; border: 1px solid var(--border); border-radius: 4px; padding: 8px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; overflow-y: auto; line-height: 1.5; }
+.stream-output .chunk { border-bottom: 1px solid #2a2a2a; padding: 2px 0; }
+.stream-output .chunk .ts { color: var(--text-dim); font-size: 10px; }
+.stream-output .chunk .content { color: var(--green); }
+.stream-output .chunk .reasoning { color: var(--yellow); font-style: italic; }
+.stream-output .chunk .raw { color: var(--text-dim); font-size: 10px; }
+
+.empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-dim); font-size: 13px; }
+
+.badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+.badge-streaming { background: #264f36; color: var(--green); }
+.badge-complete { background: #1a3a4a; color: var(--blue); }
+.badge-error { background: #4a1a1a; color: var(--red); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Veltrea Interceptor</h1>
+    <span class="status" id="connStatus">Connecting...</span>
+    <div class="metrics">
+      <span>Requests: <span class="val" id="mReqs">0</span></span>
+      <span>Tokens: <span class="val" id="mTokens">0</span></span>
+      <span>Avg TPS: <span class="val" id="mTps">-</span></span>
+      <span>Avg Latency: <span class="val" id="mLatency">-</span></span>
+    </div>
+  </div>
+
+  <div class="request-list" id="requestList">
+    <div class="empty-state">Waiting for requests...</div>
+  </div>
+
+  <div class="detail-panel" id="detailPanel">
+    <div class="empty-state">Select a request</div>
+  </div>
+
+  <div class="stream-panel">
+    <h2>
+      Live Stream
+      <div class="controls">
+        <button id="btnPause">Pause</button>
+        <button id="btnClear">Clear</button>
+        <button id="btnText" class="">Text</button>
+        <button id="btnRaw" class="">Raw</button>
+      </div>
+    </h2>
+    <div class="stream-output" id="streamOutput">
+      <div class="empty-state">Waiting for SSE data...</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span id="footerInfo">Proxy: :5555 | Dashboard: :5556</span>
+  </div>
+</div>
+
+<script>
+(function() {
+  const state = {
+    records: [],
+    selectedId: null,
+    paused: false,
+    showRaw: false,
+    showText: false,
+    ws: null,
+    // Store all chunks per interceptId for Raw toggle replay
+    chunkHistory: {},
+    // Accumulated text per interceptId for Text mode
+    textBuffer: {},
+  };
+
+  // --- Elements ---
+  const $list = document.getElementById('requestList');
+  const $detail = document.getElementById('detailPanel');
+  const $stream = document.getElementById('streamOutput');
+  const $connStatus = document.getElementById('connStatus');
+  const $mReqs = document.getElementById('mReqs');
+  const $mTokens = document.getElementById('mTokens');
+  const $mTps = document.getElementById('mTps');
+  const $mLatency = document.getElementById('mLatency');
+
+  // --- Copy button helper ---
+  function makePre(content, rawText) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pre-wrap';
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copy';
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(rawText || content).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+      });
+    });
+    const pre = document.createElement('pre');
+    pre.textContent = content;
+    wrap.appendChild(btn);
+    wrap.appendChild(pre);
+    return wrap.outerHTML;
+  }
+
+  // --- WebSocket ---
+  function connect() {
+    const wsHost = (location.protocol === 'file:' || location.protocol === 'tauri:') ? 'localhost:5556' : location.host;
+    const ws = new WebSocket(`ws://${wsHost}`);
+    state.ws = ws;
+
+    ws.onopen = () => { $connStatus.textContent = 'Connected'; $connStatus.style.color = '#4ec9b0'; };
+    ws.onclose = () => { $connStatus.textContent = 'Disconnected'; $connStatus.style.color = '#f44747'; setTimeout(connect, 2000); };
+    ws.onerror = () => { ws.close(); };
+
+    ws.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+      switch (msg.type) {
+        case 'init':
+          state.records = msg.records || [];
+          updateMetrics(msg.metrics);
+          renderList();
+          break;
+        case 'intercept_start':
+          state.records.push(msg.record);
+          state.selectedId = msg.record.id;
+          renderList();
+          renderDetail();
+          break;
+        case 'sse_chunk':
+          // Always store chunk in history
+          if (msg.chunk) {
+            if (!state.chunkHistory[msg.interceptId]) state.chunkHistory[msg.interceptId] = [];
+            state.chunkHistory[msg.interceptId].push(msg.chunk);
+          }
+          if (!state.paused && msg.chunk) {
+            appendStreamChunk(msg.interceptId, msg.chunk);
+          }
+          { const r = state.records.find(x => x.id === msg.interceptId);
+            if (r) { r.tokenCount = msg.tokenCount || r.tokenCount; }
+          }
+          if (state.selectedId === msg.interceptId) renderDetail();
+          break;
+        case 'intercept_complete':
+          { const idx = state.records.findIndex(x => x.id === msg.record.id);
+            if (idx >= 0) state.records[idx] = msg.record;
+            else state.records.push(msg.record);
+          }
+          updateMetrics(msg.metrics);
+          renderList();
+          if (state.selectedId === msg.record.id) renderDetail();
+          break;
+        case 'error':
+          appendStreamChunk('error', { ts: Date.now(), raw: `ERROR: ${msg.context}: ${msg.message}` });
+          break;
+        case 'ui_command':
+          handleUiCommand(msg.action, msg.params);
+          break;
+      }
+    };
+  }
+
+  // --- Render ---
+  function renderList() {
+    if (state.records.length === 0) {
+      $list.innerHTML = '<div class="empty-state">Waiting for requests...</div>';
+      return;
+    }
+    $list.innerHTML = state.records.map(r => {
+      const sel = r.id === state.selectedId ? ' selected' : '';
+      const statusCls = r.error ? 'status-err' : 'status-ok';
+      const statusText = r.error ? 'ERR' : (r.completedAt ? `${r.statusCode || 200}` : '...');
+      const tps = r.tps ? r.tps.toFixed(1) + ' t/s' : '';
+      const model = r.model || '';
+      const time = new Date(r.startedAt).toLocaleTimeString();
+      // Show message count for chat completions
+      const msgCount = (r.requestBody && r.requestBody.messages) ? r.requestBody.messages.length + ' msgs' : '';
+      // Show user's last message preview
+      let preview = '';
+      if (r.requestBody && r.requestBody.messages) {
+        const userMsgs = r.requestBody.messages.filter(m => m.role === 'user');
+        if (userMsgs.length > 0) {
+          const last = userMsgs[userMsgs.length - 1].content || '';
+          preview = last.length > 30 ? last.slice(0, 30) + '...' : last;
+        }
+      }
+      return `<div class="req-item${sel}" data-id="${r.id}">
+        <span class="method ${r.method}">${r.method}</span>
+        <span class="path">${escHtml(r.path)}</span>
+        <div class="meta">
+          <span>${time}</span>
+          <span class="${statusCls}">${statusText}</span>
+          ${model ? `<span class="model">${escHtml(model)}</span>` : ''}
+          ${tps ? `<span class="tps">${tps}</span>` : ''}
+          ${msgCount ? `<span class="msg-count">${msgCount}</span>` : ''}
+        </div>
+        ${preview ? `<div class="meta" style="color:var(--text);margin-top:2px;font-size:11px;">${escHtml(preview)}</div>` : ''}
+      </div>`;
+    }).reverse().join('');
+
+    $list.querySelectorAll('.req-item').forEach(el => {
+      el.addEventListener('click', () => { state.selectedId = el.dataset.id; renderList(); renderDetail(); });
+    });
+  }
+
+  function renderDetail() {
+    const r = state.records.find(x => x.id === state.selectedId);
+    if (!r) { $detail.innerHTML = '<div class="empty-state">Select a request</div>'; return; }
+
+    const badge = r.error ? '<span class="badge badge-error">ERROR</span>'
+      : r.completedAt ? '<span class="badge badge-complete">COMPLETE</span>'
+      : '<span class="badge badge-streaming">STREAMING</span>';
+
+    const latency = r.latencyMs !== undefined ? r.latencyMs + 'ms' : '-';
+    const tps = r.tps ? r.tps.toFixed(1) : '-';
+    const duration = r.completedAt ? ((r.completedAt - r.startedAt) / 1000).toFixed(1) + 's' : '-';
+
+    const reqHeadersJson = JSON.stringify(r.requestHeaders, null, 2);
+    const reqBodyJson = r.requestBody ? JSON.stringify(r.requestBody, null, 2) : '(empty)';
+    const resHeadersJson = r.responseHeaders ? JSON.stringify(r.responseHeaders, null, 2) : '(pending)';
+
+    $detail.innerHTML = `
+      <h2>Request ${badge}</h2>
+      <div class="timing">
+        <div class="stat"><div class="label">Latency (TTFT)</div><div class="value">${latency}</div></div>
+        <div class="stat"><div class="label">TPS</div><div class="value">${tps}</div></div>
+        <div class="stat"><div class="label">Duration</div><div class="value">${duration}</div></div>
+      </div>
+      <h2>Request Headers</h2>
+      ${makePre(reqHeadersJson, reqHeadersJson)}
+      <h2>Request Body</h2>
+      ${makePre(reqBodyJson, reqBodyJson)}
+      <h2>Response Headers</h2>
+      ${makePre(resHeadersJson, resHeadersJson)}
+      ${r.fullResponseBody ? `<h2>Response Body</h2>${makePre(escHtml(r.fullResponseBody.slice(0, 5000)), r.fullResponseBody)}` : ''}
+      ${r.error ? `<h2>Error</h2><div class="pre-wrap"><pre style="color:#f44747">${escHtml(r.error)}</pre></div>` : ''}
+      <h2>Tokens: ${r.tokenCount}</h2>
+      ${r.sseChunks && r.sseChunks.length > 0 ? `<h2>SSE Chunks (${r.sseChunks.length})</h2>${makePre(r.sseChunks.map(c => c.raw).join('\\n'), r.sseChunks.map(c => c.raw).join('\\n'))}` : ''}
+    `;
+
+    // Re-attach copy button listeners (innerHTML kills old ones)
+    $detail.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const pre = this.parentElement.querySelector('pre');
+        navigator.clipboard.writeText(pre.textContent).then(() => {
+          this.textContent = 'Copied!';
+          this.classList.add('copied');
+          setTimeout(() => { this.textContent = 'Copy'; this.classList.remove('copied'); }, 1500);
+        });
+      });
+    });
+  }
+
+  function appendStreamChunk(interceptId, chunk) {
+    if ($stream.querySelector('.empty-state')) $stream.innerHTML = '';
+
+    // Accumulate text for Text mode
+    if (chunk.parsed?.content) {
+      if (!state.textBuffer[interceptId]) state.textBuffer[interceptId] = '';
+      state.textBuffer[interceptId] += chunk.parsed.content;
+    }
+
+    if (state.showText) {
+      // In Text mode, update the text block for this interceptId
+      renderTextMode();
+      return;
+    }
+
+    const div = document.createElement('div');
+    div.className = 'chunk';
+    div.dataset.interceptId = interceptId;
+    div.dataset.raw = chunk.raw || '';
+    const ts = new Date(chunk.ts || Date.now()).toLocaleTimeString(undefined, { hour12: false, fractionalSecondDigits: 3 });
+    let inner = `<span class="ts">${ts}</span> `;
+    if (chunk.parsed?.content) inner += `<span class="content">${escHtml(chunk.parsed.content)}</span>`;
+    if (chunk.parsed?.reasoning) inner += `<span class="reasoning">${escHtml(chunk.parsed.reasoning)}</span>`;
+    if (state.showRaw && chunk.raw) inner += `<br><span class="raw">${escHtml(chunk.raw)}</span>`;
+    div.innerHTML = inner;
+    $stream.appendChild(div);
+    if (!state.paused) $stream.scrollTop = $stream.scrollHeight;
+  }
+
+  function renderTextMode() {
+    const ids = Object.keys(state.textBuffer);
+    if (ids.length === 0) { $stream.innerHTML = '<div class="empty-state">Waiting for SSE data...</div>'; return; }
+    let html = '';
+    for (const id of ids) {
+      const text = state.textBuffer[id];
+      if (text) {
+        html += `<div style="margin-bottom:12px;padding:8px;border-bottom:1px solid var(--border);">`;
+        html += `<div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;">${escHtml(id)}</div>`;
+        html += `<div style="color:var(--green);white-space:pre-wrap;line-height:1.6;">${escHtml(text)}</div>`;
+        html += `</div>`;
+      }
+    }
+    $stream.innerHTML = html;
+    $stream.scrollTop = $stream.scrollHeight;
+  }
+
+  // Re-render all stream chunks with/without raw data
+  function rerenderStreamChunks() {
+    $stream.querySelectorAll('.chunk').forEach(div => {
+      const rawSpan = div.querySelector('.raw');
+      if (state.showRaw && !rawSpan && div.dataset.raw) {
+        const span = document.createElement('span');
+        span.className = 'raw';
+        span.textContent = div.dataset.raw;
+        div.appendChild(document.createElement('br'));
+        div.appendChild(span);
+      } else if (!state.showRaw && rawSpan) {
+        // Remove raw span and preceding br
+        const prev = rawSpan.previousSibling;
+        if (prev && prev.tagName === 'BR') prev.remove();
+        rawSpan.remove();
+      }
+    });
+  }
+
+  function updateMetrics(m) {
+    if (!m) return;
+    $mReqs.textContent = m.totalRequests;
+    $mTokens.textContent = m.totalTokens;
+    $mTps.textContent = m.avgTps > 0 ? m.avgTps.toFixed(1) : '-';
+    $mLatency.textContent = m.avgLatencyMs > 0 ? m.avgLatencyMs.toFixed(0) + 'ms' : '-';
+  }
+
+  function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  // --- UI commands from MCP ---
+  function handleUiCommand(action, params) {
+    switch (action) {
+      case 'selectRequest':
+        if (params?.id) {
+          state.selectedId = params.id;
+          renderList();
+          renderDetail();
+        }
+        break;
+      case 'toggleRaw':
+        state.showRaw = !!params?.enabled;
+        document.getElementById('btnRaw').classList.toggle('active', state.showRaw);
+        rerenderStreamChunks();
+        break;
+      case 'clearStream':
+        $stream.innerHTML = '';
+        break;
+    }
+  }
+
+  // --- Controls ---
+  document.getElementById('btnPause').addEventListener('click', function() {
+    state.paused = !state.paused;
+    this.textContent = state.paused ? 'Resume' : 'Pause';
+    this.classList.toggle('active', state.paused);
+  });
+  document.getElementById('btnClear').addEventListener('click', () => {
+    $stream.innerHTML = '';
+    state.textBuffer = {};
+  });
+  document.getElementById('btnText').addEventListener('click', function() {
+    state.showText = !state.showText;
+    this.classList.toggle('active', state.showText);
+    if (state.showText) {
+      renderTextMode();
+    } else {
+      // Switch back to chunk mode — re-render from chunkHistory
+      $stream.innerHTML = '';
+      for (const [interceptId, chunks] of Object.entries(state.chunkHistory)) {
+        for (const chunk of chunks) {
+          // Bypass text mode by directly creating chunk divs
+          const div = document.createElement('div');
+          div.className = 'chunk';
+          div.dataset.interceptId = interceptId;
+          div.dataset.raw = chunk.raw || '';
+          const ts = new Date(chunk.ts || Date.now()).toLocaleTimeString(undefined, { hour12: false, fractionalSecondDigits: 3 });
+          let inner = `<span class="ts">${ts}</span> `;
+          if (chunk.parsed?.content) inner += `<span class="content">${escHtml(chunk.parsed.content)}</span>`;
+          if (chunk.parsed?.reasoning) inner += `<span class="reasoning">${escHtml(chunk.parsed.reasoning)}</span>`;
+          if (state.showRaw && chunk.raw) inner += `<br><span class="raw">${escHtml(chunk.raw)}</span>`;
+          div.innerHTML = inner;
+          $stream.appendChild(div);
+        }
+      }
+    }
+  });
+  document.getElementById('btnRaw').addEventListener('click', function() {
+    state.showRaw = !state.showRaw;
+    this.classList.toggle('active', state.showRaw);
+    rerenderStreamChunks();
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.db
+*.db-shm
+*.db-wal
+gui/src-tauri/target/
+gui/node_modules/
+mcp/node_modules/
+.claude/
+.agents-relay/
+ChatClient.app/
+chat-client
+dumps/

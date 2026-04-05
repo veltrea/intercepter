@@ -1,0 +1,7 @@
+{
+  "proxyPort": 5555,
+  "uiPort": 5556,
+  "upstreamUrl": "http://localhost:1234",
+  "maxRecordedSessions": 100,
+  "logLevel": "info"
+}

@@ -1,0 +1,22 @@
+{
+  "name": "veltrea-interceptor",
+  "version": "0.1.0",
+  "description": "AI communication interceptor proxy",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "~5.7.0"
+  }
+}
